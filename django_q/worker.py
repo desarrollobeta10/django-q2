@@ -35,12 +35,14 @@ except ModuleNotFoundError:
 
 
 def worker(
-    task_queue: Queue, result_queue: Queue, timer: Value, timeout: int = Conf.TIMEOUT
+    task_queue: Queue, result_queue: Queue, timer: Value, timeout: int = Conf.TIMEOUT,
+    current_task_queue: Queue = None,
 ):
     """
     Takes a task from the task queue, tries to execute it and puts the result back in
     the result queue
     :param timeout: number of seconds wait for a worker to finish.
+    :param current_task_queue: shared queue to communicate current task to sentinel
     :type task_queue: multiprocessing.Queue
     :type result_queue: multiprocessing.Queue
     :type timer: multiprocessing.Value
@@ -95,6 +97,15 @@ def worker(
         timer_value = task.pop("timeout", timeout)
         # signal execution
         pre_execute.send(sender="django_q", func=f, task=task)
+        # Communicate current task to sentinel so it can report timeout failures.
+        # Without this, when the sentinel kills a worker by timeout, max_attempts
+        # and ack_failures don't work because the worker dies before putting the
+        # result in result_queue.
+        if current_task_queue is not None:
+            try:
+                current_task_queue.put(task, block=False)
+            except Exception:
+                pass
         # execute the payload
         timer.value = timer_value  # Busy
 
@@ -111,6 +122,12 @@ def worker(
             if task.get("sync", False):
                 raise
         with timer.get_lock():
+            # Clear current task from shared queue (task completed normally)
+            if current_task_queue is not None:
+                try:
+                    current_task_queue.get(block=False)
+                except Exception:
+                    pass
             # Process result
             task["result"] = result[0]
             task["success"] = result[1]
