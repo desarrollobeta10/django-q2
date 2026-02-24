@@ -205,6 +205,7 @@ class Sentinel:
         if target == worker:
             p.daemon = Conf.DAEMONIZE_WORKERS
             p.timer = args[2]
+            p.current_task_queue = args[4]
             self.pool.append(p)
         p.start()
         return p
@@ -213,8 +214,12 @@ class Sentinel:
         return self.spawn_process(pusher, self.task_queue, self.event_out, self.broker)
 
     def spawn_worker(self):
+        # Each worker has a Queue to communicate to the sentinel which task it's currently processing.
+        # If the sentinel kills the worker on timeout, it reads the task from here and reports it as failed.
+        current_task_queue = Queue(maxsize=1)
         self.spawn_process(
-            worker, self.task_queue, self.result_queue, Value("f", -1), self.timeout
+            worker, self.task_queue, self.result_queue, Value("f", -1), self.timeout,
+            current_task_queue
         )
 
     def spawn_monitor(self) -> Process:
@@ -252,8 +257,15 @@ class Sentinel:
             self.pool.remove(process)
             self.spawn_worker()
             if process.timer.value == 0:
-                # only need to terminate on timeout, otherwise we risk destabilizing
-                # the queues
+                # Timeout: retrieve the task the worker was processing BEFORE terminating it,
+                # to report it as failed to the monitor.
+                # Without this, max_attempts and ack_failures don't work with timeouts
+                # because the worker dies before putting the result in result_queue.
+                timed_out_task = None
+                try:
+                    timed_out_task = process.current_task_queue.get(block=False)
+                except Exception:
+                    pass
                 task_name = ""
                 if psutil:
                     try:
@@ -266,7 +278,18 @@ class Sentinel:
                         )
                     except psutil.NoSuchProcess:
                         pass
+                # only need to terminate on timeout, otherwise we risk destabilizing
+                # the queues
                 process.terminate()
+                # Report the task as failed so the monitor can handle it
+                if timed_out_task:
+                    timed_out_task["result"] = _(
+                        "Task timed out after %(timeout)s seconds"
+                    ) % {"timeout": self.timeout}
+                    timed_out_task["success"] = False
+                    timed_out_task["stopped"] = timezone.now()
+                    self.result_queue.put(timed_out_task)
+                    task_name = task_name or timed_out_task.get("name", "")
                 if task_name:
                     msg = _(
                         "reincarnated worker %(name)s after timeout while processing task %(task_name)s"
