@@ -174,8 +174,11 @@ class Conf:
     # Only works with brokers that guarantee delivery. Defaults to 60 seconds.
     RETRY = conf.get("retry", 60)
 
+    # Optional attempt count. set to 0 for infinite attempts
+    MAX_ATTEMPTS = conf.get("max_attempts", 0)
+
     # Verify if retry and timeout settings are correct
-    if not TIMEOUT or (TIMEOUT > RETRY):
+    if MAX_ATTEMPTS != 1 and (not TIMEOUT or (TIMEOUT > RETRY)):
         warn(
             "Retry and timeout are misconfigured. Set retry larger than timeout,"
             "failure to do so will cause the tasks to be retriggered before completion."
@@ -218,9 +221,6 @@ class Conf:
 
     # Optional error reporting setup
     ERROR_REPORTER = conf.get("error_reporter", {})
-
-    # Optional attempt count. set to 0 for infinite attempts
-    MAX_ATTEMPTS = conf.get("max_attempts", 0)
 
     # OSX doesn't implement qsize because of missing sem_getvalue()
     try:
