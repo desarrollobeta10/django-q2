@@ -128,9 +128,6 @@ def worker(
             result = (f"{e} : {traceback.format_exc()}", False)
             if error_reporter:
                 error_reporter.report()
-            if task.get("sync", False):
-                post_execute_in_worker.send(sender="django_q", func=f, task=task)
-                raise
 
         with timer.get_lock():
             # Clear current task from shared queue (task completed normally)
