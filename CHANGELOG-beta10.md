@@ -32,7 +32,7 @@ git push origin rev-beta10-N
 
 ## Integración continua
 
-`.github/workflows/test-beta10.yml` ejecuta la suite completa, con Redis y Mongo como servicios, en las dos combinaciones que usa Beta10: Python 3.9 con Django 4.2 (producción) y Python 3.12 con Django 5.2 (desarrollo). Cada una va con su versión de Ubuntu fija (`ubuntu-24.04` y `ubuntu-26.04`): `actions/setup-python` no tiene Python 3.9 para Ubuntu 26.04. Se lanza al subir a `master`, en los PR contra `master` y al subir una etiqueta `rev-beta10-*`.
+`.github/workflows/test-beta10.yml` ejecuta la suite completa, con Redis y Mongo como servicios, con Python 3.12 y Django 5.2, que es lo que usan las dos líneas activas de Beta10 (producción y desarrollo; se comprueba en `https://actualizaciones.beta10.es/api/ramas` y en el `requirements/base.txt` de api-interna de cada `release/`). Va con `ubuntu-26.04` fija, no con `ubuntu-latest`. Si una línea vuelve a usar otra versión de Python o de Django, se añade como otro trabajo. Se lanza al subir a `master`, en los PR contra `master` y al subir una etiqueta `rev-beta10-*`.
 
 Los workflows heredados del original se dejan en la repo para no tener conflictos al sincronizar. **`test.yml` hay que desactivarlo** en la pestaña *Actions* (o con `gh workflow disable tests --repo desarrollobeta10/django-q2`): lanza 14 combinaciones con `ubuntu-latest`, donde ya no hay Python 3.9, y sube la cobertura a Coveralls, así que dejaría en rojo cada subida a `master`. `release.yml` no hace falta tocarlo: su trabajo solo se ejecuta en `django-q2/django-q2`.
 
