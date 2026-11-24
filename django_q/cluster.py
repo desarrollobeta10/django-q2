@@ -82,7 +82,21 @@ class Cluster:
         )
         self.sentinel.start()
         logger.info(_("Q Cluster %(name)s starting.") % {"name": self.name})
-        while not self.start_event.is_set():
+        while self.start_event and not self.start_event.is_set():
+            if not self.sentinel.is_alive():
+                if self.sentinel.exitcode == 0:
+                    break
+                logger.error(
+                    _(
+                        "Q Cluster %(name)s failed to start. Sentinel exited "
+                        "with exit code %(exitcode)s."
+                    )
+                    % {"name": self.name, "exitcode": self.sentinel.exitcode}
+                )
+                raise RuntimeError(
+                    f"Q Cluster {self.name} failed to start: sentinel exited "
+                    f"with code {self.sentinel.exitcode}"
+                )
             sleep(0.1)
         return self.pid
 

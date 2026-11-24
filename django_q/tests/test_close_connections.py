@@ -183,6 +183,26 @@ def test_cluster_signal_handler_records_stop_when_sentinel_is_already_dead():
     assert cluster.stop_requested
 
 
+def test_cluster_start_fails_when_sentinel_dies_before_starting():
+    sentinel = mock.MagicMock()
+    sentinel.is_alive.return_value = False
+    sentinel.exitcode = 1
+    waits = []
+
+    def sleep(seconds):
+        waits.append(seconds)
+        if len(waits) > 50:
+            raise AssertionError("start() kept waiting for a dead sentinel")
+
+    with mock.patch("django_q.cluster.signal.signal"):
+        cluster = Cluster(broker=mock.MagicMock())
+    with mock.patch("django_q.cluster.Process", return_value=sentinel), mock.patch(
+        "django_q.cluster.sleep", side_effect=sleep
+    ):
+        with pytest.raises(RuntimeError, match="exited with code 1"):
+            cluster.start()
+
+
 def test_qcluster_run_once_does_not_wait_for_sentinel():
     cluster = _fake_cluster(exitcode=0, stop_requested=False)
     with mock.patch(
