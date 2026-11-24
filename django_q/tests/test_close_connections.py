@@ -8,33 +8,43 @@ from django.db import DatabaseError
 
 from django_q import utils
 from django_q.cluster import Sentinel
+from django_q.conf import Conf
 from django_q.scheduler import scheduler
 
 KILLED = DatabaseError("DPY-4011: the database or network closed the connection")
 
 
-class KilledConnection:
-    alias = "default"
-
-    def __init__(self):
+class FakeConnection:
+    def __init__(self, alias, error=None):
+        self.alias = alias
         self.connection = object()
-
-    def _discard_and_raise(self):
-        self.connection = None
-        raise KILLED
+        self.error = error
+        self.closed = False
 
     def close(self):
-        self._discard_and_raise()
+        if self.error is None:
+            self.connection = None
+            self.closed = True
+            return
+        if self.error is KILLED:
+            self.connection = None
+        raise self.error
 
     def close_if_unusable_or_obsolete(self):
-        self._discard_and_raise()
+        self.close()
 
 
 @pytest.fixture
 def killed_connection():
-    conn = KilledConnection()
-    with mock.patch("django.db.connections.all", return_value=[conn]):
-        yield conn
+    conns = [FakeConnection("default", error=KILLED), FakeConnection("other")]
+    with mock.patch("django.db.connections.all", return_value=conns):
+        yield conns
+
+
+@pytest.fixture
+def no_sync():
+    with mock.patch.object(Conf, "SYNC", False):
+        yield
 
 
 @pytest.mark.parametrize("only_old", [True, False])
@@ -42,11 +52,11 @@ def test_close_django_connections_discards_killed_connection(killed_connection, 
     with mock.patch("django_q.utils.logger") as logger:
         utils.close_django_connections(only_old=only_old)
 
-    assert killed_connection.connection is None
+    assert killed_connection[1].closed
     logger.warning.assert_called_once()
 
 
-def test_reincarnate_survives_killed_connection(killed_connection):
+def test_reincarnate_survives_killed_connection(killed_connection, no_sync):
     sentinel = Sentinel(Event(), Event(), uuid.uuid4(), broker=mock.MagicMock(), start=False)
     dead_pusher = mock.MagicMock()
     sentinel.pusher = dead_pusher
@@ -59,7 +69,7 @@ def test_reincarnate_survives_killed_connection(killed_connection):
     assert sentinel.pusher == "new pusher"
 
 
-def test_spawn_cluster_survives_killed_connection(killed_connection):
+def test_spawn_cluster_survives_killed_connection(killed_connection, no_sync):
     sentinel = Sentinel(Event(), Event(), uuid.uuid4(), broker=mock.MagicMock(), start=False)
 
     with mock.patch.object(Sentinel, "spawn_worker"), mock.patch.object(
