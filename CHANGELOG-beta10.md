@@ -30,6 +30,12 @@ git push origin master rev-beta10-N
 
 ## Revisiones
 
+## rev-beta10-4 — pendiente de etiquetar
+
+- Cola de tareas: no se recupera si Oracle mata sus sesiones (GLP-32915).
+  - Cerrar una conexión que la base de datos ya ha matado (`ORA-00028`) ya no aborta el centinela, el pusher, el monitor, los workers ni el programador: la conexión se descarta con un aviso en el log y la siguiente consulta abre otra.
+  - `qcluster` sale con código 1 si el centinela termina sin que se haya pedido la parada, para que el servicio de Windows lo trate como un fallo y lo reinicie.
+
 ## rev-beta10-1 — 2026-06-09
 
 Primera revisión etiquetada. Recoge los cambios propios de Beta10 acumulados

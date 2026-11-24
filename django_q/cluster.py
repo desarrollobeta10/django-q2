@@ -8,7 +8,7 @@ from multiprocessing import Event, Process, Value, current_process
 from time import sleep
 
 # Django
-from django import core, db
+from django import core
 from django.apps.registry import apps
 
 try:
@@ -37,6 +37,7 @@ from django_q.pusher import pusher
 from django_q.queues import Queue
 from django_q.scheduler import scheduler
 from django_q.status import Stat, Status
+from django_q.utils import close_django_connections
 from django_q.worker import worker
 
 
@@ -232,7 +233,7 @@ class Sentinel:
         """
         # close connections before spawning new process
         if not Conf.SYNC:
-            db.connections.close_all()
+            close_django_connections(only_old=False)
         if process == self.monitor:
             self.monitor = self.spawn_monitor()
             logger.critical(
@@ -326,7 +327,7 @@ class Sentinel:
         Stat(self).save()
         # close connections before spawning new process
         if not Conf.SYNC:
-            db.connections.close_all()
+            close_django_connections(only_old=False)
         # spawn worker pool
         for __ in range(self.pool_size):
             self.spawn_worker()

@@ -83,4 +83,20 @@ def close_old_django_connections():
             "which may result in unexpected behaviour."
         )
     else:
-        db.close_old_connections()
+        close_django_connections()
+
+
+def close_django_connections(only_old: bool = True):
+    """
+    Close django connections, discarding the ones the database has already killed.
+    """
+    for conn in db.connections.all(initialized_only=True):
+        try:
+            if only_old:
+                conn.close_if_unusable_or_obsolete()
+            else:
+                conn.close()
+        except db.Error as e:
+            logger.warning(
+                "Discarded broken database connection '%s': %s", conn.alias, e
+            )
