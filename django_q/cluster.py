@@ -8,7 +8,7 @@ from multiprocessing import Event, Process, Value, current_process
 from time import sleep
 
 # Django
-from django import core
+from django import core, db  # noqa: F401
 from django.apps.registry import apps
 
 try:
