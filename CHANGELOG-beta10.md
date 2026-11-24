@@ -33,8 +33,9 @@ git push origin master rev-beta10-N
 ## rev-beta10-4 — pendiente de etiquetar
 
 - Cola de tareas: no se recupera si Oracle mata sus sesiones (GLP-32915).
-  - Cerrar una conexión que la base de datos ya ha matado (`ORA-00028`) ya no aborta el centinela, el pusher, el monitor, los workers ni el programador: la conexión se descarta con un aviso en el log y la siguiente consulta abre otra.
-  - `qcluster` sale con código 1 si el centinela termina sin que se haya pedido la parada, para que el servicio de Windows lo trate como un fallo y lo reinicie.
+  - Cerrar una conexión que la base de datos ya ha cerrado (`ORA-00028` o `ORA-03113` en Oracle, que oracledb da como `DPY-4011`) ya no aborta el centinela, el pusher, el monitor, los workers ni el programador: la conexión se descarta con un aviso en el log y la siguiente consulta abre otra. Los errores que no descartan la conexión se siguen propagando.
+  - `qcluster` sale con código 1 si el centinela termina sin que se haya pedido la parada con una señal, para que el servicio de Windows lo trate como un fallo y lo reinicie. Una parada pedida sale con 0 aunque la misma señal haya terminado también el centinela.
+  - Si el centinela muere antes de terminar de arrancar (por ejemplo, porque Oracle no responde), `Cluster.start()` lanza un error en lugar de esperar para siempre. Es el mismo cambio que el original incluyó en #305.
 
 ## rev-beta10-1 — 2026-06-09
 
