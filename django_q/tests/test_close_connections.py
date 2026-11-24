@@ -102,8 +102,10 @@ def test_spawn_cluster_survives_killed_connection(killed_connection, no_sync):
 
 
 @pytest.mark.django_db
-def test_scheduler_survives_killed_connection(killed_connection):
+def test_scheduler_survives_killed_connection(killed_connection, no_sync):
     scheduler(broker=mock.MagicMock())
+
+    assert killed_connection[1].closed
 
 
 @pytest.mark.django_db(transaction=True)
@@ -112,18 +114,13 @@ def test_orm_broker_survives_killed_connection(killed_connection):
 
     ORM.get_connection()
 
+    assert killed_connection[1].closed
 
-def _fake_cluster(exitcode, stop_requested, stop_event_set=None):
+
+def _fake_cluster(exitcode, stop_requested):
     cluster = mock.MagicMock()
     cluster.sentinel.exitcode = exitcode
-
-    def start():
-        cluster.stop_requested = stop_requested
-        cluster.stop_event = Event()
-        if stop_requested if stop_event_set is None else stop_event_set:
-            cluster.stop_event.set()
-
-    cluster.start.side_effect = start
+    cluster.stop_requested = stop_requested
     return cluster
 
 
@@ -161,9 +158,7 @@ def test_qcluster_exits_cleanly_after_requested_stop():
 
 
 def test_qcluster_exits_cleanly_when_signal_also_killed_the_sentinel():
-    cluster = _fake_cluster(
-        exitcode=-signal.SIGTERM, stop_requested=True, stop_event_set=False
-    )
+    cluster = _fake_cluster(exitcode=-signal.SIGTERM, stop_requested=True)
     with mock.patch(
         "django_q.management.commands.qcluster.Cluster", return_value=cluster
     ):
