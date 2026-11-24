@@ -82,9 +82,10 @@ class Cluster:
         )
         self.sentinel.start()
         logger.info(_("Q Cluster %(name)s starting.") % {"name": self.name})
-        while self.start_event and not self.start_event.is_set():
+        start_event = self.start_event
+        while not start_event.is_set():
             if not self.sentinel.is_alive():
-                if self.sentinel.exitcode == 0:
+                if self.sentinel.exitcode == 0 or self.stop_requested:
                     break
                 logger.error(
                     _(

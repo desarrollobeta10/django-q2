@@ -203,6 +203,58 @@ def test_cluster_start_fails_when_sentinel_dies_before_starting():
             cluster.start()
 
 
+def _cluster_with_sentinel(sentinel):
+    with mock.patch("django_q.cluster.signal.signal"):
+        cluster = Cluster(broker=mock.MagicMock())
+    patches = (
+        mock.patch("django_q.cluster.Process", return_value=sentinel),
+        mock.patch("django_q.cluster.sleep"),
+    )
+    return cluster, patches
+
+
+def test_cluster_start_ends_quietly_when_stop_signal_kills_starting_sentinel():
+    sentinel = mock.MagicMock()
+    sentinel.exitcode = -signal.SIGTERM
+
+    def is_alive():
+        if sentinel.is_alive.call_count == 1:
+            return True
+        cluster.stop_requested = True
+        return False
+
+    sentinel.is_alive.side_effect = is_alive
+    cluster, (process, sleep) = _cluster_with_sentinel(sentinel)
+    with process, sleep:
+        assert cluster.start() == cluster.pid
+
+
+def test_cluster_start_survives_stop_clearing_start_event_while_waiting():
+    sentinel = mock.MagicMock()
+    sentinel.is_alive.return_value = True
+    cluster, (process, sleep) = _cluster_with_sentinel(sentinel)
+
+    class ClearedByStop:
+        def __init__(self):
+            self.checks = 0
+
+        def __bool__(self):
+            cluster.start_event = None
+            return True
+
+        def set(self):
+            pass
+
+        def is_set(self):
+            self.checks += 1
+            return self.checks > 1
+
+    with process, sleep, mock.patch(
+        "django_q.cluster.Event", side_effect=[Event(), ClearedByStop()]
+    ):
+        assert cluster.start() == cluster.pid
+
+
 def test_qcluster_run_once_does_not_wait_for_sentinel():
     cluster = _fake_cluster(exitcode=0, stop_requested=False)
     with mock.patch(
