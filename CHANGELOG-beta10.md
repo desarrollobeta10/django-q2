@@ -34,7 +34,7 @@ git push origin rev-beta10-N
 
 `.github/workflows/test-beta10.yml` ejecuta la suite completa, con Redis y Mongo como servicios, en las dos combinaciones que usa Beta10: Python 3.9 con Django 4.2 (producción) y Python 3.12 con Django 5.2 (desarrollo). Cada una va con su versión de Ubuntu fija (`ubuntu-24.04` y `ubuntu-26.04`): `actions/setup-python` no tiene Python 3.9 para Ubuntu 26.04. Se lanza al subir a `master`, en los PR contra `master` y al subir una etiqueta `rev-beta10-*`.
 
-Los workflows heredados del original (`test.yml`, `release.yml` y `codeql-analysis.yml`) se dejan en la repo para no tener conflictos al sincronizar, pero se desactivan en la pestaña *Actions*: `test.yml` lanza 14 combinaciones con `ubuntu-latest` y sube la cobertura a Coveralls, y `release.yml` intentaría publicar en PyPI con cada etiqueta.
+Los workflows heredados del original se dejan en la repo para no tener conflictos al sincronizar. **`test.yml` hay que desactivarlo** en la pestaña *Actions* (o con `gh workflow disable tests --repo desarrollobeta10/django-q2`): lanza 14 combinaciones con `ubuntu-latest`, donde ya no hay Python 3.9, y sube la cobertura a Coveralls, así que dejaría en rojo cada subida a `master`. `release.yml` no hace falta tocarlo: su trabajo solo se ejecuta en `django-q2/django-q2`.
 
 ## Revisiones
 
@@ -44,7 +44,7 @@ Los workflows heredados del original (`test.yml`, `release.yml` y `codeql-analys
   - Cerrar una conexión que la base de datos ya ha cerrado (`ORA-00028` o `ORA-03113` en Oracle, que oracledb da como `DPY-4011`) ya no aborta el centinela, el pusher, el monitor, los workers ni el programador: la conexión se descarta con un aviso en el log y la siguiente consulta abre otra. Los errores que no descartan la conexión se siguen propagando.
   - `qcluster` sale con código 1 si el centinela termina sin que se haya pedido la parada con una señal, para que el servicio de Windows lo trate como un fallo y lo reinicie. Una parada pedida sale con 0 aunque la misma señal haya terminado también el centinela.
   - Workflow propio de integración continua (`test-beta10.yml`).
-  - Si el centinela muere antes de terminar de arrancar (por ejemplo, porque Oracle no responde), `Cluster.start()` lanza un error en lugar de esperar para siempre. Es el mismo cambio que el original incluyó en #305.
+  - Si el centinela muere antes de terminar de arrancar (por ejemplo, porque Oracle no responde), `Cluster.start()` lanza un error en lugar de esperar para siempre. Parte del cambio #305 del original, con dos diferencias: si la parada se ha pedido con una señal, termina sin error aunque esa señal haya terminado también el centinela, y lee `start_event` una sola vez, porque en Windows `stop()` lo pone a `None` desde otro hilo.
 
 ## rev-beta10-1 — 2026-06-09
 
