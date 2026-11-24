@@ -97,6 +97,8 @@ def close_django_connections(only_old: bool = True):
             else:
                 conn.close()
         except db.Error as e:
+            if conn.connection is not None:
+                raise
             logger.warning(
                 "Discarded broken database connection '%s': %s", conn.alias, e
             )

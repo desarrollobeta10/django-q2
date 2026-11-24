@@ -48,7 +48,9 @@ def no_sync():
 
 
 @pytest.mark.parametrize("only_old", [True, False])
-def test_close_django_connections_discards_killed_connection(killed_connection, only_old):
+def test_close_django_connections_discards_killed_connection(
+    killed_connection, only_old
+):
     with mock.patch("django_q.utils.logger") as logger:
         utils.close_django_connections(only_old=only_old)
 
@@ -56,13 +58,29 @@ def test_close_django_connections_discards_killed_connection(killed_connection, 
     logger.warning.assert_called_once()
 
 
+def test_close_django_connections_raises_errors_that_keep_the_connection():
+    misuse = DatabaseError(
+        "DatabaseWrapper objects created in a thread can only be used in that same thread."
+    )
+    conns = [FakeConnection("default", error=misuse)]
+    with mock.patch("django.db.connections.all", return_value=conns):
+        with pytest.raises(DatabaseError, match="same thread"):
+            utils.close_django_connections()
+
+    assert conns[0].connection is not None
+
+
 def test_reincarnate_survives_killed_connection(killed_connection, no_sync):
-    sentinel = Sentinel(Event(), Event(), uuid.uuid4(), broker=mock.MagicMock(), start=False)
+    sentinel = Sentinel(
+        Event(), Event(), uuid.uuid4(), broker=mock.MagicMock(), start=False
+    )
     dead_pusher = mock.MagicMock()
     sentinel.pusher = dead_pusher
     sentinel.monitor = mock.MagicMock()
 
-    with mock.patch.object(Sentinel, "spawn_pusher", return_value="new pusher") as spawn:
+    with mock.patch.object(
+        Sentinel, "spawn_pusher", return_value="new pusher"
+    ) as spawn:
         sentinel.reincarnate(dead_pusher)
 
     spawn.assert_called_once()
@@ -70,7 +88,9 @@ def test_reincarnate_survives_killed_connection(killed_connection, no_sync):
 
 
 def test_spawn_cluster_survives_killed_connection(killed_connection, no_sync):
-    sentinel = Sentinel(Event(), Event(), uuid.uuid4(), broker=mock.MagicMock(), start=False)
+    sentinel = Sentinel(
+        Event(), Event(), uuid.uuid4(), broker=mock.MagicMock(), start=False
+    )
 
     with mock.patch.object(Sentinel, "spawn_worker"), mock.patch.object(
         Sentinel, "spawn_monitor"
@@ -107,7 +127,9 @@ def _fake_cluster(exitcode, stop_requested):
 
 def test_qcluster_exits_with_error_when_sentinel_dies():
     cluster = _fake_cluster(exitcode=1, stop_requested=False)
-    with mock.patch("django_q.management.commands.qcluster.Cluster", return_value=cluster):
+    with mock.patch(
+        "django_q.management.commands.qcluster.Cluster", return_value=cluster
+    ):
         with pytest.raises(SystemExit) as exc:
             call_command("qcluster")
 
@@ -117,7 +139,9 @@ def test_qcluster_exits_with_error_when_sentinel_dies():
 
 def test_qcluster_exits_with_error_when_sentinel_ends_without_stop():
     cluster = _fake_cluster(exitcode=0, stop_requested=False)
-    with mock.patch("django_q.management.commands.qcluster.Cluster", return_value=cluster):
+    with mock.patch(
+        "django_q.management.commands.qcluster.Cluster", return_value=cluster
+    ):
         with pytest.raises(SystemExit) as exc:
             call_command("qcluster")
 
@@ -126,7 +150,9 @@ def test_qcluster_exits_with_error_when_sentinel_ends_without_stop():
 
 def test_qcluster_exits_cleanly_after_requested_stop():
     cluster = _fake_cluster(exitcode=0, stop_requested=True)
-    with mock.patch("django_q.management.commands.qcluster.Cluster", return_value=cluster):
+    with mock.patch(
+        "django_q.management.commands.qcluster.Cluster", return_value=cluster
+    ):
         call_command("qcluster")
 
     cluster.sentinel.join.assert_called_once()
@@ -134,7 +160,9 @@ def test_qcluster_exits_cleanly_after_requested_stop():
 
 def test_qcluster_run_once_does_not_wait_for_sentinel():
     cluster = _fake_cluster(exitcode=0, stop_requested=False)
-    with mock.patch("django_q.management.commands.qcluster.Cluster", return_value=cluster):
+    with mock.patch(
+        "django_q.management.commands.qcluster.Cluster", return_value=cluster
+    ):
         call_command("qcluster", "--run-once")
 
     cluster.stop.assert_called_once()
