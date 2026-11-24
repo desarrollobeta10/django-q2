@@ -1,3 +1,4 @@
+import signal
 import uuid
 from multiprocessing import Event
 from unittest import mock
@@ -7,7 +8,7 @@ from django.core.management import call_command
 from django.db import DatabaseError
 
 from django_q import utils
-from django_q.cluster import Sentinel
+from django_q.cluster import Cluster, Sentinel
 from django_q.conf import Conf
 from django_q.scheduler import scheduler
 
@@ -112,13 +113,14 @@ def test_orm_broker_survives_killed_connection(killed_connection):
     ORM.get_connection()
 
 
-def _fake_cluster(exitcode, stop_requested):
+def _fake_cluster(exitcode, stop_requested, stop_event_set=None):
     cluster = mock.MagicMock()
     cluster.sentinel.exitcode = exitcode
 
     def start():
+        cluster.stop_requested = stop_requested
         cluster.stop_event = Event()
-        if stop_requested:
+        if stop_requested if stop_event_set is None else stop_event_set:
             cluster.stop_event.set()
 
     cluster.start.side_effect = start
@@ -156,6 +158,29 @@ def test_qcluster_exits_cleanly_after_requested_stop():
         call_command("qcluster")
 
     cluster.sentinel.join.assert_called_once()
+
+
+def test_qcluster_exits_cleanly_when_signal_also_killed_the_sentinel():
+    cluster = _fake_cluster(
+        exitcode=-signal.SIGTERM, stop_requested=True, stop_event_set=False
+    )
+    with mock.patch(
+        "django_q.management.commands.qcluster.Cluster", return_value=cluster
+    ):
+        call_command("qcluster")
+
+    cluster.sentinel.join.assert_called_once()
+
+
+def test_cluster_signal_handler_records_stop_when_sentinel_is_already_dead():
+    with mock.patch("django_q.cluster.signal.signal"):
+        cluster = Cluster(broker=mock.MagicMock())
+    cluster.sentinel = mock.MagicMock()
+    cluster.sentinel.is_alive.return_value = False
+
+    cluster.sig_handler(signal.SIGTERM, None)
+
+    assert cluster.stop_requested
 
 
 def test_qcluster_run_once_does_not_wait_for_sentinel():

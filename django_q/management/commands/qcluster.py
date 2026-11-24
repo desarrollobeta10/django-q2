@@ -41,8 +41,7 @@ class Command(BaseCommand):
             q.stop()
             return
         q.sentinel.join()
-        stop_requested = q.stop_event is None or q.stop_event.is_set()
-        if q.sentinel.exitcode != 0 or not stop_requested:
+        if not q.stop_requested:
             logger.critical(
                 _("Sentinel stopped unexpectedly with exit code %(code)s")
                 % {"code": q.sentinel.exitcode}

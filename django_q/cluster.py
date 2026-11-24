@@ -49,6 +49,7 @@ class Cluster:
         self.sentinel = None
         self.stop_event = None
         self.start_event = None
+        self.stop_requested = False
         self.pid = current_process().pid
         self.cluster_id = uuid.uuid4()
         self.host = socket.gethostname()
@@ -104,6 +105,7 @@ class Cluster:
                 "signal": Conf.SIGNAL_NAMES.get(signum, "UNKNOWN"),
             }
         )
+        self.stop_requested = True
         self.stop()
 
     def sig_handler_windows(self, signum):
