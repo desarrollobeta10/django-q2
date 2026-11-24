@@ -1,9 +1,11 @@
 import os
+import sys
 
 from django.core.management.base import BaseCommand
 from django.utils.translation import gettext as _
 
 from django_q.cluster import Cluster
+from django_q.conf import logger
 
 
 class Command(BaseCommand):
@@ -37,3 +39,11 @@ class Command(BaseCommand):
         q.start()
         if options.get("run_once", False):
             q.stop()
+            return
+        q.sentinel.join()
+        if not q.stop_requested:
+            logger.critical(
+                _("Sentinel stopped unexpectedly with exit code %(code)s")
+                % {"code": q.sentinel.exitcode}
+            )
+            sys.exit(1)

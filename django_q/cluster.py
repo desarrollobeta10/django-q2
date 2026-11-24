@@ -8,7 +8,7 @@ from multiprocessing import Event, Process, Value, current_process
 from time import sleep
 
 # Django
-from django import core, db
+from django import core, db  # noqa: F401
 from django.apps.registry import apps
 
 try:
@@ -37,6 +37,7 @@ from django_q.pusher import pusher
 from django_q.queues import Queue
 from django_q.scheduler import scheduler
 from django_q.status import Stat, Status
+from django_q.utils import close_django_connections
 from django_q.worker import worker
 
 
@@ -48,6 +49,7 @@ class Cluster:
         self.sentinel = None
         self.stop_event = None
         self.start_event = None
+        self.stop_requested = False
         self.pid = current_process().pid
         self.cluster_id = uuid.uuid4()
         self.host = socket.gethostname()
@@ -80,7 +82,22 @@ class Cluster:
         )
         self.sentinel.start()
         logger.info(_("Q Cluster %(name)s starting.") % {"name": self.name})
-        while not self.start_event.is_set():
+        start_event = self.start_event
+        while not start_event.is_set():
+            if not self.sentinel.is_alive():
+                if self.sentinel.exitcode == 0 or self.stop_requested:
+                    break
+                logger.error(
+                    _(
+                        "Q Cluster %(name)s failed to start. Sentinel exited "
+                        "with exit code %(exitcode)s."
+                    )
+                    % {"name": self.name, "exitcode": self.sentinel.exitcode}
+                )
+                raise RuntimeError(
+                    f"Q Cluster {self.name} failed to start: sentinel exited "
+                    f"with code {self.sentinel.exitcode}"
+                )
             sleep(0.1)
         return self.pid
 
@@ -103,6 +120,7 @@ class Cluster:
                 "signal": Conf.SIGNAL_NAMES.get(signum, "UNKNOWN"),
             }
         )
+        self.stop_requested = True
         self.stop()
 
     def sig_handler_windows(self, signum):
@@ -232,7 +250,7 @@ class Sentinel:
         """
         # close connections before spawning new process
         if not Conf.SYNC:
-            db.connections.close_all()
+            close_django_connections(only_old=False)
         if process == self.monitor:
             self.monitor = self.spawn_monitor()
             logger.critical(
@@ -326,7 +344,7 @@ class Sentinel:
         Stat(self).save()
         # close connections before spawning new process
         if not Conf.SYNC:
-            db.connections.close_all()
+            close_django_connections(only_old=False)
         # spawn worker pool
         for __ in range(self.pool_size):
             self.spawn_worker()
